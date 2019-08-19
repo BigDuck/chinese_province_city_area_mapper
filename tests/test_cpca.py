@@ -297,3 +297,11 @@ def test_handle_one_record3(monkeypatch):
     assert result1['省_pos'] == 0
     assert result1['市_pos'] == -1
     assert result1['区_pos'] == 3
+
+def test_region_code():
+    '''区域编码获取'''
+    pca = Pca('福建省', '厦门市', '湖里区')
+    print(pca.region_code)
+    assert pca.region_code == '1156350200'
+if __name__ == '__main__':
+    test_region_code()

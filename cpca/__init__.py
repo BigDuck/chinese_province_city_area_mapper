@@ -3,7 +3,7 @@
 
 
 from .structures import AddrMap, Pca
-from .structures import P,C,A
+from .structures import P, C, A
 
 VERSION = (0, 1, 0)
 
@@ -22,6 +22,7 @@ def _data_from_csv() -> (AddrMap, AddrMap, AddrMap, dict, dict):
     # (省名, 市名, 区名) -> (纬度,经度)
     latlng = {}
     # 数据约定:国家直辖市的sheng字段为直辖市名称, 省直辖县的city字段为空
+    region_code_dict = {}
     from pkg_resources import resource_stream
 
     with resource_stream('cpca.resources', 'pca.csv') as pca_stream:
@@ -37,8 +38,8 @@ def _data_from_csv() -> (AddrMap, AddrMap, AddrMap, dict, dict):
             _fill_area_map(area_map, record_dict)
             _fill_city_map(city_map, record_dict)
             _fill_province_area_map(province_area_map, record_dict)
-
-    return area_map, city_map, province_area_map, province_map, latlng
+            region_code_dict[(record_dict['sheng'], record_dict['shi'])] = (record_dict['region'])
+    return area_map, city_map, province_area_map, province_map, latlng, region_code_dict
 
 
 def _fill_province_area_map(province_area_map: AddrMap, record_dict):
@@ -67,7 +68,7 @@ def _fill_city_map(city_map: AddrMap, record_dict):
         city_map.append_relational_addr('香港', pca_tuple, C)
     elif city_name == '澳门特别行政区':
         city_map.append_relational_addr('澳门', pca_tuple, C)
-    
+
 
 def _fill_province_map(province_map, record_dict):
     sheng = record_dict['sheng']
@@ -96,7 +97,7 @@ def _fill_province_map(province_map, record_dict):
             province_map['澳门'] = sheng
 
 
-area_map, city_map, province_area_map, province_map, latlng = _data_from_csv()
+area_map, city_map, province_area_map, province_map, latlng, region_code_dict = _data_from_csv()
 
 myumap = {
     '南关区': '长春市',
@@ -112,23 +113,25 @@ myumap = {
 }
 
 
-def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_sensitive=False):
+def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_sensitive=False, need_region_code=False):
     """将地址描述字符串转换以"省","市","区"信息为列的DataFrame表格
         Args:
-            locations:地址描述字符集合,可以是list, Series等任意可以进行for in循环的集合
+            :param locations:地址描述字符集合,可以是list, Series等任意可以进行for in循环的集合
                       比如:["徐汇区虹漕路461号58号楼5楼", "泉州市洛江区万安塘西工业区"]
-            umap:自定义的区级到市级的映射,主要用于解决区重名问题,如果定义的映射在模块中已经存在，则会覆盖模块中自带的映射
-            index:可以通过这个参数指定输出的DataFrame的index,默认情况下是range(len(data))
-            cut:是否使用分词，默认使用，分词模式速度较快，但是准确率可能会有所下降
-            lookahead:只有在cut为false的时候有效，表示最多允许向前看的字符的数量
+            :param umap:自定义的区级到市级的映射,主要用于解决区重名问题,如果定义的映射在模块中已经存在，则会覆盖模块中自带的映射
+            :param index:可以通过这个参数指定输出的DataFrame的index,默认情况下是range(len(data))
+            :param cut:是否使用分词，默认使用，分词模式速度较快，但是准确率可能会有所下降
+            :param lookahead: 只有在cut为false的时候有效，表示最多允许向前看的字符的数量
                       默认值为8是为了能够发现"新疆维吾尔族自治区"这样的长地名
                       如果你的样本中都是短地名的话，可以考虑把这个数字调小一点以提高性能
-            pos_sensitive:如果为True则会多返回三列，分别提取出的省市区在字符串中的位置，如果字符串中不存在的话则显示-1
+            :param pos_sensitive: 如果为True则会多返回三列，分别提取出的省市区在字符串中的位置，如果字符串中不存在的话则显示-1
+            :param need_region_code: 是否需要区域编码 默认不需要
         Returns:
             一个Pandas的DataFrame类型的表格，如下：
                |省    |市   |区    |地址                 |
                |上海市|上海市|徐汇区|虹漕路461号58号楼5楼  |
                |福建省|泉州市|洛江区|万安塘西工业区        |
+
     """
 
     from collections.abc import Iterable
@@ -140,13 +143,17 @@ def transform(location_strs, umap=myumap, index=[], cut=True, lookahead=8, pos_s
 
     import pandas as pd
 
-    result = pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs], index=index) \
-             if index else pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs])
+    result = pd.DataFrame([_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs],
+                          index=index) \
+        if index else pd.DataFrame(
+        [_handle_one_record(addr, umap, cut, lookahead, pos_sensitive) for addr in location_strs])
     # 这句的唯一作用是让列的顺序好看一些
+    result_list = ['省', '市', '区', '地址']
     if pos_sensitive:
-        return result.loc[:, ('省', '市', '区', '地址', '省_pos', '市_pos', '区_pos')]
-    else:
-        return result.loc[:, ('省', '市', '区', '地址')]
+        result_list.append(['省_pos', '市_pos', '区_pos'])
+    if need_region_code:
+        result_list.append('区域编码')
+    return result.loc[:, tuple(result_list)]
 
 
 def _handle_one_record(addr, umap, cut, lookahead, pos_sensitive):
@@ -167,7 +174,8 @@ def _handle_one_record(addr, umap, cut, lookahead, pos_sensitive):
     _fill_city(pca, umap)
 
     _fill_province(pca)
-
+    # 填充区域code
+    _fill_region_code(pca)
     result = pca.propertys_dict(pos_sensitive)
     result["地址"] = addr
 
@@ -178,6 +186,11 @@ def _fill_province(pca):
     """填充省"""
     if (not pca.province) and pca.city and (pca.city in city_map):
         pca.province = city_map.get_value(pca.city, P)
+
+
+def _fill_region_code(pca):
+    if (not pca.region_code) and pca.province and pca.city and (pca.city in city_map):
+        pca.region_code = region_code_dict.get((pca.province, pca.city))
 
 
 def _fill_city(pca, umap):
@@ -235,13 +248,15 @@ def _jieba_extract(addr):
 
     for word in jieba.cut(addr):
         # 优先提取低级别行政区 (主要是为直辖市和特别行政区考虑)
+        print(word)
         if word in area_map:
             _set_pca('area', word, area_map.get_full_name(word))
         elif word in city_map:
             _set_pca('city', word, city_map.get_full_name(word))
         elif word in province_map:
             _set_pca('province', word, province_map[word])
-        
+        elif word in region_code:
+            _set_pca('region', word, region_code[word])
         pos += len(word)
 
     return result, addr[truncate:]
@@ -256,6 +271,7 @@ def _full_text_extract(addr, lookahead):
 
     def _set_pca(pca_property, pos, name, full_name):
         """pca_property: 'province', 'city' or 'area'"""
+
         def _defer_set():
             if not getattr(result, pca_property):
                 setattr(result, pca_property, full_name)
@@ -263,6 +279,7 @@ def _full_text_extract(addr, lookahead):
                 nonlocal truncate
                 if pos == truncate:
                     truncate += len(name)
+
         return _defer_set
 
     # i为起始位置

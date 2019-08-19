@@ -20,7 +20,7 @@ class AddrMap(defaultdict):
         """key所映射到的地址列表中的地址是否唯一"""
         if key not in self.keys():
             return False
-        
+
         return len(self.get_relational_addrs(key)) == 1
 
     def get_relational_addrs(self, key):
@@ -38,19 +38,21 @@ class AddrMap(defaultdict):
 
 class Pca(object):
 
-    def __init__(self, province = '', city = '', area = '', province_pos = -1, city_pos = -1, area_pos = -1):
+    def __init__(self, province='', city='', area='', province_pos=-1, city_pos=-1, area_pos=-1, region_code=''):
         self.province = province
         self.city = city
         self.area = area
         self.province_pos = province_pos
         self.city_pos = city_pos
         self.area_pos = area_pos
+        self.region_code = region_code
 
     def propertys_dict(self, pos_sensitive):
         result = {
             "省": self.province,
             "市": self.city,
-            "区": self.area
+            "区": self.area,
+            "区域编码": self.region_code
         }
 
         if pos_sensitive:
