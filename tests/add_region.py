@@ -45,4 +45,5 @@ def test_region():
 
 
 if __name__ == '__main__':
-    test_region()
+    df = cpca.transform(["厦门市湖里区"], need_region_code=True)
+    print(df)

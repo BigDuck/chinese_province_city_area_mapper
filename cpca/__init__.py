@@ -255,8 +255,8 @@ def _jieba_extract(addr):
             _set_pca('city', word, city_map.get_full_name(word))
         elif word in province_map:
             _set_pca('province', word, province_map[word])
-        elif word in region_code:
-            _set_pca('region', word, region_code[word])
+        elif word in region_code_dict:
+            _set_pca('region_code', word, region_code_dict[word])
         pos += len(word)
 
     return result, addr[truncate:]
